@@ -32,7 +32,7 @@ leaflet
   .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      "&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>",
   })
   .addTo(map);
 
@@ -50,15 +50,48 @@ sensorButton.addEventListener("click", () => {
   });
 });
 
-let points = 0;
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
+
+interface Coin {
+  readonly i: number;
+  readonly j: number;
+  readonly serial: number;
+}
+
+const playerPoints: Coin[] = [];
+
+class Cache {
+  points: Coin[] = [];
+
+  constructor() {
+    this.points = [];
+  }
+
+  addPoint(point: Coin, table: HTMLDivElement) {
+    this.points.push(point);
+    const button = document.createElement("button");
+    button.innerHTML = "Collect: " + point.i + ", " + point.j + "#" + point.serial;
+    button.addEventListener("click", () => {
+      playerPoints.push(point);
+      statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
+      this.removePoint(point);
+      button.remove();
+    });
+    table.appendChild(button);
+  }
+
+  removePoint(point: Coin) {
+    this.points = this.points.filter((p) => p !== point);
+  }
+}
 
 function makePit(i: number, j: number) {
   const point = leaflet.latLng({
     lat: MERRILL_CLASSROOM.lat + i * TILE_DEGREES,
     lng: MERRILL_CLASSROOM.lng + j * TILE_DEGREES,
   });
+
   const cell = world.getCellForPoint(point);
 
   const cellBounds = world.getCellBounds(cell);
@@ -68,28 +101,29 @@ function makePit(i: number, j: number) {
   const cellCoordinates: string = world.returnCellCoordinates(cell);
 
   pit.bindPopup(() => {
-    let value = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
+    let value = Math.floor(luck([i, j, "initialValue"].toString()) * 4);
     const container = document.createElement("div");
-    container.innerHTML = `
-                <div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>
-                <button id="poke">poke</button>
-                <button id="store">store</button>`;
-    const poke = container.querySelector<HTMLButtonElement>("#poke")!;
-    poke.addEventListener("click", () => {
-      value--;
-      container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-        value.toString();
-      points++;
-      statusPanel.innerHTML = `${points} points accumulated`;
+    const cache = new Cache();
+    container.innerHTML = `<div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>`;
+
+    // add a table for the coins
+    const cointable = document.createElement("table");
+    container.appendChild(cointable);
+    for (let n = 0; n < value; n++) {
+      cache.addPoint({ i: point.lat, j: point.lng, serial: n }, cointable);
+    }
+
+    const storeButton = document.createElement("button");
+    storeButton.innerHTML = "Deposit";
+    storeButton.addEventListener("click", () => {
+      const coin = playerPoints.pop();
+      if (coin) {
+        value++;
+        cache.addPoint(coin, container);
+        statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
+      }
     });
-    const store = container.querySelector<HTMLButtonElement>("#store")!;
-    store.addEventListener("click", () => {
-      points--;
-      statusPanel.innerHTML = `${points} points accumulated`;
-      value++;
-      container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-        value.toString();
-    });
+    container.appendChild(storeButton);
     return container;
   });
   pit.addTo(map);
