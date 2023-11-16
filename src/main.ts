@@ -50,6 +50,38 @@ sensorButton.addEventListener("click", () => {
   });
 });
 
+const westButton = document.querySelector("#west")!;
+westButton.addEventListener("click", () => {
+  playerMarker.setLatLng(
+    leaflet.latLng(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng - TILE_DEGREES)
+  );
+  map.setView(playerMarker.getLatLng());
+});
+
+const eastButton = document.querySelector("#east")!;
+eastButton.addEventListener("click", () => {
+  playerMarker.setLatLng(
+    leaflet.latLng(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng + TILE_DEGREES)
+  );
+  map.setView(playerMarker.getLatLng());
+});
+
+const northButton = document.querySelector("#north")!;
+northButton.addEventListener("click", () => {
+  playerMarker.setLatLng(
+    leaflet.latLng(playerMarker.getLatLng().lat + TILE_DEGREES, playerMarker.getLatLng().lng)
+  );
+  map.setView(playerMarker.getLatLng());
+});
+
+const southButton = document.querySelector("#south")!;
+southButton.addEventListener("click", () => {
+  playerMarker.setLatLng(
+    leaflet.latLng(playerMarker.getLatLng().lat - TILE_DEGREES, playerMarker.getLatLng().lng)
+  );
+  map.setView(playerMarker.getLatLng());
+});
+
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
 
@@ -61,35 +93,94 @@ interface Coin {
 
 const playerPoints: Coin[] = [];
 
-class Cache {
-  points: Coin[] = [];
+interface Momento<T> {
+  toMomento(): T;
+  fromMomento(momento: T): void;
+}
 
-  constructor() {
+class Cache implements Momento<string>{
+  points: Coin[] = [];
+  lat: number;
+  lng: number;
+
+  constructor(lat: number, lng: number) {
     this.points = [];
+    this.lat = lat;
+    this.lng = lng;
   }
 
-  addPoint(point: Coin, table: HTMLDivElement) {
-    this.points.push(point);
+  createButton(point: Coin, table: HTMLDivElement) {
     const button = document.createElement("button");
-    button.innerHTML = "Collect: " + point.i + ", " + point.j + "#" + point.serial;
+    button.innerHTML = "Collect: " + point.i.toFixed(4) + ", " + point.j.toFixed(4) + "#" + point.serial;
     button.addEventListener("click", () => {
       playerPoints.push(point);
       statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
       this.removePoint(point);
       button.remove();
     });
-    table.appendChild(button);
+    // create a cell in the table
+    const row = document.createElement("tr");
+
+    row.appendChild(button);
+    table.appendChild(row);
+  }
+
+  addPoint(point: Coin, table: HTMLDivElement) {
+    this.points.push(point);
+    this.createButton(point, table);
+
+    this.preserveMomento();
   }
 
   removePoint(point: Coin) {
     this.points = this.points.filter((p) => p !== point);
+
+    this.preserveMomento();
+  }
+
+  toMomento() {
+    return JSON.stringify(this.points);
+  }
+
+  fromMomento(momento : string) {
+    this.points = JSON.parse(momento) as Coin[];
+  }
+
+  preserveMomento() {
+    const momento = doesMomentoExist(this.lat, this.lng);
+    if (momento) {
+      momento.points = this.toMomento();
+    } else {
+      momentos.push({ lat: this.lat, lng: this.lng, points: this.toMomento() });
+    }
+  }
+
+  loadFromMomento(momento : CacheMomento, table: HTMLDivElement) {
+    this.fromMomento(momento.points);
+    for (const point of this.points) {
+      this.createButton(point, table);
+    }
   }
 }
 
+interface CacheMomento {
+  lat: number;
+  lng: number;
+  points: string;
+}
+
+const momentos: CacheMomento[] = [];
+
+function doesMomentoExist(lat: number, lng: number) {
+  return momentos.find((m) => m.lat === lat && m.lng === lng);
+}
+
+const pits: leaflet.Layer[] = [];
+
 function makePit(i: number, j: number) {
   const point = leaflet.latLng({
-    lat: MERRILL_CLASSROOM.lat + i * TILE_DEGREES,
-    lng: MERRILL_CLASSROOM.lng + j * TILE_DEGREES,
+    lat: playerMarker.getLatLng().lat + i * TILE_DEGREES,
+    lng: playerMarker.getLatLng().lng + j * TILE_DEGREES,
   });
 
   const cell = world.getCellForPoint(point);
@@ -103,15 +194,24 @@ function makePit(i: number, j: number) {
   pit.bindPopup(() => {
     let value = Math.floor(luck([i, j, "initialValue"].toString()) * 4);
     const container = document.createElement("div");
-    const cache = new Cache();
+    const cache = new Cache(point.lat, point.lng);
+
+    const cointable = document.createElement("table");
+
+    const momento = doesMomentoExist(point.lat, point.lng);
+
+    if (momento) {
+      cache.loadFromMomento(momento, cointable);
+      value = cache.points.length;
+    } else {
+      for (let n = 0; n < value; n++) {
+        cache.addPoint({ i: point.lat, j: point.lng, serial: n }, cointable);
+      }
+    }
+
     container.innerHTML = `<div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>`;
 
-    // add a table for the coins
-    const cointable = document.createElement("table");
     container.appendChild(cointable);
-    for (let n = 0; n < value; n++) {
-      cache.addPoint({ i: point.lat, j: point.lng, serial: n }, cointable);
-    }
 
     const storeButton = document.createElement("button");
     storeButton.innerHTML = "Deposit";
@@ -119,7 +219,8 @@ function makePit(i: number, j: number) {
       const coin = playerPoints.pop();
       if (coin) {
         value++;
-        cache.addPoint(coin, container);
+        container.innerHTML = `<div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>`;
+        cache.addPoint(coin, cointable);
         statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
       }
     });
@@ -127,12 +228,17 @@ function makePit(i: number, j: number) {
     return container;
   });
   pit.addTo(map);
+  pits.push(pit);
 }
 
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    if (luck([i, j].toString()) < PIT_SPAWN_PROBABILITY) {
-      makePit(i, j);
+function generatePits() {
+  for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
+    for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+      if (luck([i, j].toString()) < PIT_SPAWN_PROBABILITY) {
+        makePit(i, j);
+      }
     }
   }
 }
+
+generatePits();
