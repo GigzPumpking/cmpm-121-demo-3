@@ -191,8 +191,6 @@ function makePit(i: number, j: number) {
 
   const pit = leaflet.rectangle(cellBounds) as leaflet.Layer;
 
-  const cellCoordinates: string = world.returnCellCoordinates(cell);
-
   pit.bindPopup(() => {
     let value = Math.floor(luck([i, j, "initialValue"].toString()) * 4);
     const container = document.createElement("div");
@@ -211,7 +209,7 @@ function makePit(i: number, j: number) {
       }
     }
 
-    container.innerHTML = `<div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>`;
+    container.innerHTML = `<div>There is a pit here at "${point.i}, ${point.j}". It has value <span id="value">${value}</span>.</div>`;
 
     container.appendChild(cointable);
 
@@ -221,7 +219,7 @@ function makePit(i: number, j: number) {
       const coin = playerPoints.pop();
       if (coin) {
         value++;
-        container.innerHTML = `<div>There is a pit here at "${cellCoordinates}". It has value <span id="value">${value}</span>.</div>`;
+        container.innerHTML = `<div>There is a pit here at "${point.i}, ${point.j}". It has value <span id="value">${value}</span>.</div>`;
         cache.addPoint(coin, cointable);
         statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
       }
