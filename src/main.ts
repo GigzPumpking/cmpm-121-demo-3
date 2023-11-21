@@ -3,7 +3,7 @@ import "./style.css";
 import leaflet from "leaflet";
 import luck from "./luck";
 import "./leafletWorkaround";
-import { Board } from "./board";
+import { Board, Cell } from "./board";
 
 const MERRILL_CLASSROOM = leaflet.latLng({
   lat: 36.9995,
@@ -50,36 +50,41 @@ sensorButton.addEventListener("click", () => {
   });
 });
 
-const westButton = document.querySelector("#west")!;
-westButton.addEventListener("click", () => {
+function movePlayer(deltaI: number, deltaJ: number) {
   playerMarker.setLatLng(
-    leaflet.latLng(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng - TILE_DEGREES)
+    leaflet.latLng(
+      playerMarker.getLatLng().lat + deltaI * TILE_DEGREES,
+      playerMarker.getLatLng().lng + deltaJ * TILE_DEGREES
+    )
   );
   map.setView(playerMarker.getLatLng());
+  
+  // Delete all current pits
+  for (const pit of pits) {
+    pit.remove();
+  }
+
+  generatePits();
+}
+
+const westButton = document.querySelector("#west")!;
+westButton.addEventListener("click", () => {
+  movePlayer(0, -1);
 });
 
 const eastButton = document.querySelector("#east")!;
 eastButton.addEventListener("click", () => {
-  playerMarker.setLatLng(
-    leaflet.latLng(playerMarker.getLatLng().lat, playerMarker.getLatLng().lng + TILE_DEGREES)
-  );
-  map.setView(playerMarker.getLatLng());
+  movePlayer(0, 1);
 });
 
 const northButton = document.querySelector("#north")!;
 northButton.addEventListener("click", () => {
-  playerMarker.setLatLng(
-    leaflet.latLng(playerMarker.getLatLng().lat + TILE_DEGREES, playerMarker.getLatLng().lng)
-  );
-  map.setView(playerMarker.getLatLng());
+  movePlayer(1, 0);
 });
 
 const southButton = document.querySelector("#south")!;
 southButton.addEventListener("click", () => {
-  playerMarker.setLatLng(
-    leaflet.latLng(playerMarker.getLatLng().lat - TILE_DEGREES, playerMarker.getLatLng().lng)
-  );
-  map.setView(playerMarker.getLatLng());
+  movePlayer(-1, 0);
 });
 
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
@@ -178,14 +183,11 @@ function doesMomentoExist(lat: number, lng: number) {
 const pits: leaflet.Layer[] = [];
 
 function makePit(i: number, j: number) {
-  const point = leaflet.latLng({
-    lat: playerMarker.getLatLng().lat + i * TILE_DEGREES,
-    lng: playerMarker.getLatLng().lng + j * TILE_DEGREES,
-  });
+  const point : Cell = { i, j };
 
   const cell = world.getCellForPoint(point);
 
-  const cellBounds = world.getCellBounds(cell);
+  const cellBounds = world.getCellBounds(point);
 
   const pit = leaflet.rectangle(cellBounds) as leaflet.Layer;
 
@@ -194,18 +196,18 @@ function makePit(i: number, j: number) {
   pit.bindPopup(() => {
     let value = Math.floor(luck([i, j, "initialValue"].toString()) * 4);
     const container = document.createElement("div");
-    const cache = new Cache(point.lat, point.lng);
+    const cache = new Cache(point.i, point.j);
 
     const cointable = document.createElement("table");
 
-    const momento = doesMomentoExist(point.lat, point.lng);
+    const momento = doesMomentoExist(point.i, point.j);
 
     if (momento) {
       cache.loadFromMomento(momento, cointable);
       value = cache.points.length;
     } else {
       for (let n = 0; n < value; n++) {
-        cache.addPoint({ i: point.lat, j: point.lng, serial: n }, cointable);
+        cache.addPoint({ i: point.i, j: point.j, serial: n }, cointable);
       }
     }
 
@@ -232,13 +234,16 @@ function makePit(i: number, j: number) {
 }
 
 function generatePits() {
-  for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-    for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-      if (luck([i, j].toString()) < PIT_SPAWN_PROBABILITY) {
-        makePit(i, j);
-      }
+  // Generate new pits
+  const nearbyCells = world.getCellsNearPoint(playerMarker.getLatLng());
+
+  nearbyCells.forEach((element) => {
+    const { i, j } = element;
+
+    if (luck([i, j].toString()) < PIT_SPAWN_PROBABILITY) {
+      makePit(i, j);
     }
-  }
+  });
 }
 
 generatePits();

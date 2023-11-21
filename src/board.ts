@@ -1,6 +1,6 @@
 import leaflet from "leaflet";
 
-interface Cell {
+export interface Cell {
     readonly i: number;
     readonly j: number;
 }
@@ -43,6 +43,7 @@ export class Board {
             [i * this.tileWidth, j * this.tileWidth],
             [(i + 1) * this.tileWidth, (j + 1) * this.tileWidth],
         ]);
+        
     }
 
     getCellsNearPoint(point: leaflet.LatLng): Cell[] {
@@ -52,10 +53,7 @@ export class Board {
         for (let i = -this.tileVisibilityRadius; i <= this.tileVisibilityRadius; i++) {
             for (let j = -this.tileVisibilityRadius; j <= this.tileVisibilityRadius; j++) {
                 const cell = this.getCanonicalCell({ i: originCell.i + i, j: originCell.j + j });
-                const cellBounds = this.getCellBounds(cell);
-                if (point.distanceTo(cellBounds.getCenter()) <= this.tileVisibilityRadius) {
-                    resultCells.push(cell);
-                }
+                resultCells.push(cell);
             }
         }
 
