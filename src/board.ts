@@ -59,8 +59,4 @@ export class Board {
 
         return resultCells;
     }
-
-    returnCellCoordinates(cell: Cell): string {
-        return `(${cell.i}, ${cell.j})`;
-    }
 }
