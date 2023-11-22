@@ -16,8 +16,9 @@ const NEIGHBORHOOD_SIZE = 8;
 const PIT_SPAWN_PROBABILITY = 0.1;
 
 const world: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
-let locations : leaflet.LatLng[] = [];
+let locations: leaflet.LatLng[] = [];
 let line: Polyline;
+const lines: Polyline[] = [];
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
 
@@ -38,8 +39,7 @@ leaflet
   })
   .addTo(map);
 
-const playerMarker = leaflet.marker(MERRILL_CLASSROOM);
-locations.push(playerMarker.getLatLng());
+const playerMarker: leaflet.Marker = leaflet.marker(MERRILL_CLASSROOM);
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
@@ -55,19 +55,36 @@ sensorButton.addEventListener("click", () => {
   }
 });
 
+const resetButton = document.querySelector("#reset")!;
+resetButton.addEventListener("click", () => {
+  // prompt the user to confirm
+  const input = prompt("Are you sure you want to reset the game? Type Y to confirm: ");
+
+  if (input === "Y" || input === "y") {
+    playerPoints.length = 0;
+    statusPanel.innerHTML = "No points yet...";
+    momentos.length = 0;
+    location.reload();
+    localStorage.clear();
+  }
+});
+
+function updatePlayerAndMap(location: leaflet.LatLng) {
+  playerMarker.setLatLng(location);
+  map.setView(playerMarker.getLatLng());
+  locations.push(playerMarker.getLatLng());
+  line = leaflet.polyline(locations, { color: "black" }).addTo(map);
+  lines.push(line);
+  generatePits();
+}
+
 function movePlayer(deltaI: number, deltaJ: number) {
-  playerMarker.setLatLng(
+  updatePlayerAndMap(
     leaflet.latLng(
       playerMarker.getLatLng().lat + deltaI * TILE_DEGREES,
       playerMarker.getLatLng().lng + deltaJ * TILE_DEGREES
     )
   );
-  map.setView(playerMarker.getLatLng());
-  locations.push(playerMarker.getLatLng());
-
-  line = leaflet.polyline(locations, { color: "black" }).addTo(map);
-
-  generatePits();
 }
 
 const westButton = document.querySelector("#west")!;
@@ -101,6 +118,14 @@ interface Coin {
 
 const playerPoints: Coin[] = [];
 
+function updateStatusPanel() {
+  if (playerPoints.length === 0) {
+    statusPanel.innerHTML = "No points yet...";
+  } else {
+    statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
+  }
+}
+
 interface Momento<T> {
   toMomento(): T;
   fromMomento(momento: T): void;
@@ -122,7 +147,7 @@ class Cache implements Momento<string>{
     button.innerHTML = "Collect: " + point.i.toFixed(4) + ", " + point.j.toFixed(4) + "#" + point.serial;
     button.addEventListener("click", () => {
       playerPoints.push(point);
-      statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
+      updateStatusPanel();
       this.removePoint(point);
       button.remove();
     });
@@ -222,7 +247,7 @@ function makePit(i: number, j: number) {
         value++;
         container.innerHTML = `<div>There is a pit here at "${point.i}, ${point.j}". It has value <span id="value">${value}</span>.</div>`;
         cache.addPoint(coin, cointable);
-        statusPanel.innerHTML = `${playerPoints.length} points accumulated`;
+        updateStatusPanel();
       }
     });
     container.appendChild(storeButton);
@@ -250,24 +275,62 @@ function generatePits() {
   });
 }
 
-generatePits();
-
 // update the player's location every 100ms
 function updatePosition() {
   if (isTracking) {
     navigator.geolocation.getCurrentPosition((position) => {
-      playerMarker.setLatLng(
-        leaflet.latLng(position.coords.latitude, position.coords.longitude)
-      );
+      updatePlayerAndMap(leaflet.latLng(position.coords.latitude, position.coords.longitude));
       locations = [playerMarker.getLatLng()];
       if (line) line.remove();
-      map.setView(playerMarker.getLatLng());
-      generatePits();
     });
   }
 
   requestAnimationFrame(updatePosition);
 }
 
-updatePosition();
+addEventListener("load", () => {
+  generatePits();
+  const loadedMomentos = localStorage.getItem("momentos");
+  if (loadedMomentos) {
+    for (const momento of JSON.parse(loadedMomentos) as CacheMomento[]) {
+      momentos.push(momento);
+    }
+  }
+  const loadedPlayerPoints = localStorage.getItem("playerPoints");
+  if (loadedPlayerPoints) {
+    for (const point of JSON.parse(loadedPlayerPoints) as Coin[]) {
+      playerPoints.push(point);
+    }
+  }
+  const loadedLocations = localStorage.getItem("locations");
+  if (loadedLocations) {
+    locations = JSON.parse(loadedLocations) as leaflet.LatLng[];
+  }
+  const loadedLines = localStorage.getItem("lines");
+  if (loadedLines) {
+    for (const line of JSON.parse(loadedLines) as Polyline[]) {
+      lines.push(line);
+      line.addTo(map);
+    }
+  }
 
+  console.log(locations[locations.length - 1]);
+
+  const loadedLatLng = locations[locations.length - 1];
+  
+  if (loadedLatLng !== undefined) {
+    updatePlayerAndMap(loadedLatLng);
+  } else {
+    updatePlayerAndMap(MERRILL_CLASSROOM);
+  }
+
+  updateStatusPanel();
+});
+addEventListener("beforeunload", () => {
+  localStorage.setItem("playerPoints", JSON.stringify(playerPoints));
+  localStorage.setItem("momentos", JSON.stringify(momentos));
+  localStorage.setItem("locations", JSON.stringify(locations));
+  localStorage.setItem("lines", JSON.stringify(lines));
+});
+
+updatePosition();
