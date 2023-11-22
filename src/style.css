@@ -89,3 +89,8 @@ table {
   padding: 5px;
   margin: 10px;
 }
+
+.active {
+  background-color: #646cff;
+  color: #ffffff;
+}

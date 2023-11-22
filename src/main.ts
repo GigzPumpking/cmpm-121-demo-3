@@ -1,6 +1,6 @@
 import "leaflet/dist/leaflet.css";
 import "./style.css";
-import leaflet from "leaflet";
+import leaflet, { Polyline } from "leaflet";
 import luck from "./luck";
 import "./leafletWorkaround";
 import { Board, Cell } from "./board";
@@ -16,6 +16,8 @@ const NEIGHBORHOOD_SIZE = 8;
 const PIT_SPAWN_PROBABILITY = 0.1;
 
 const world: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+let locations : leaflet.LatLng[] = [];
+let line: Polyline;
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
 
@@ -37,17 +39,20 @@ leaflet
   .addTo(map);
 
 const playerMarker = leaflet.marker(MERRILL_CLASSROOM);
+locations.push(playerMarker.getLatLng());
 playerMarker.bindTooltip("That's you!");
 playerMarker.addTo(map);
 
+let isTracking = false;
+
 const sensorButton = document.querySelector("#sensor")!;
 sensorButton.addEventListener("click", () => {
-  navigator.geolocation.watchPosition((position) => {
-    playerMarker.setLatLng(
-      leaflet.latLng(position.coords.latitude, position.coords.longitude)
-    );
-    map.setView(playerMarker.getLatLng());
-  });
+  isTracking = !isTracking;
+  if (isTracking) {
+    sensorButton.classList.add("active");
+  } else {
+    sensorButton.classList.remove("active");
+  }
 });
 
 function movePlayer(deltaI: number, deltaJ: number) {
@@ -58,11 +63,9 @@ function movePlayer(deltaI: number, deltaJ: number) {
     )
   );
   map.setView(playerMarker.getLatLng());
-  
-  // Delete all current pits
-  for (const pit of pits) {
-    pit.remove();
-  }
+  locations.push(playerMarker.getLatLng());
+
+  line = leaflet.polyline(locations, { color: "black" }).addTo(map);
 
   generatePits();
 }
@@ -230,6 +233,11 @@ function makePit(i: number, j: number) {
 }
 
 function generatePits() {
+  // Delete all current pits
+  for (const pit of pits) {
+    pit.remove();
+  }
+
   // Generate new pits
   const nearbyCells = world.getCellsNearPoint(playerMarker.getLatLng());
 
@@ -243,3 +251,23 @@ function generatePits() {
 }
 
 generatePits();
+
+// update the player's location every 100ms
+function updatePosition() {
+  if (isTracking) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      playerMarker.setLatLng(
+        leaflet.latLng(position.coords.latitude, position.coords.longitude)
+      );
+      locations = [playerMarker.getLatLng()];
+      if (line) line.remove();
+      map.setView(playerMarker.getLatLng());
+      generatePits();
+    });
+  }
+
+  requestAnimationFrame(updatePosition);
+}
+
+updatePosition();
+
